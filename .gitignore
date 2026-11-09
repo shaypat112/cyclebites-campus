@@ -4,3 +4,6 @@ __pycache__/
 cyclebites.db
 cyclebites.db-shm
 cyclebites.db-wal
+cyclebites.db-journal
+.streamlit/secrets.toml
+*.bundle
