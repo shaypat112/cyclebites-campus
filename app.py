@@ -8,6 +8,7 @@ from html import escape
 from pathlib import Path
 
 import streamlit as st
+import streamlit_shadcn_ui as ui
 
 
 DB_PATH = Path(__file__).with_name("cyclebites.db")
@@ -187,13 +188,6 @@ def apply_theme() -> None:
         .section-heading { font: 750 1.04rem 'Manrope', sans-serif; color: var(--ink);
             letter-spacing: -.025em; margin: .25rem 0 .75rem; }
         .section-copy { color: var(--muted); font-size: .82rem; margin: -.3rem 0 1rem; }
-        .metric-card { background: #fff; border: 1px solid var(--line); border-radius: 15px;
-            padding: 1.25rem 1.3rem; min-height: 142px; box-shadow: 0 2px 8px #173b2606; }
-        .metric-label { color: #627569; font-size: .78rem; font-weight: 700; }
-        .metric-value { color: var(--ink); font: 800 clamp(1.7rem, 2.3vw, 2.15rem) 'Manrope', sans-serif;
-            letter-spacing: -.055em; margin: .5rem 0 .35rem; white-space: nowrap; }
-        .metric-detail { color: #849187; font-size: .74rem; }
-        .metric-card.accent { background: #eaf4ec; border-color: #d9e9dc; }
         .quiet-callout { background: #eaf4ec; border: 1px solid #d9e9dc; border-radius: 14px;
             padding: 1.1rem 1.2rem; color: #315c3e; font-size: .86rem; line-height: 1.55; }
         .quiet-callout strong { color: #164d32; }
@@ -201,8 +195,6 @@ def apply_theme() -> None:
             letter-spacing: -.03em; margin-bottom: .45rem; }
         .feed-meta { color: #52695a; font-size: .84rem; margin: .32rem 0; }
         .feed-note { color: #718277; font-size: .81rem; margin-top: .6rem; }
-        .tag { display: inline-block; background: #eaf4ec; color: #276747; border-radius: 99px;
-            padding: .28rem .6rem; font-size: .7rem; font-weight: 750; margin-bottom: .8rem; }
         .list-row { border-bottom: 1px solid var(--line); padding: .85rem 0; }
         .list-row:last-child { border-bottom: 0; }
         .list-primary { color: var(--ink); font-weight: 750; font-size: .9rem; }
@@ -210,8 +202,6 @@ def apply_theme() -> None:
         @media (max-width: 640px) {
             .block-container { padding: 1.3rem 1rem 3rem; }
             .page-header { margin-bottom: 1.4rem; }
-            .metric-card { min-height: 0; padding: 1rem; }
-            .metric-value { font-size: 1.55rem; }
         }
         </style>
         """,
@@ -224,16 +214,6 @@ def page_header(eyebrow: str, title: str, description: str) -> None:
         f'<div class="page-header"><div class="page-kicker">{escape(eyebrow)}</div>'
         f'<h1 class="page-title">{escape(title)}</h1>'
         f'<p class="page-copy">{escape(description)}</p></div>',
-        unsafe_allow_html=True,
-    )
-
-
-def metric_card(label: str, value: str, detail: str, *, accent: bool = False) -> None:
-    variant = " accent" if accent else ""
-    st.markdown(
-        f'<div class="metric-card{variant}"><div class="metric-label">{escape(label)}</div>'
-        f'<div class="metric-value">{escape(value)}</div>'
-        f'<div class="metric-detail">{escape(detail)}</div></div>',
         unsafe_allow_html=True,
     )
 
@@ -279,7 +259,10 @@ def donor_page() -> None:
                 else:
                     st.success("Pickup published. It is visible on the live board.")
     with side_area:
-        metric_card("Live pickups", str(len(active_listings())), "Currently available on campus", accent=True)
+        ui.metric_card(
+            "Live pickups", len(active_listings()),
+            description="Currently available on campus", variant="dashboard", key="donor_live",
+        )
         st.write("")
         st.markdown(
             '<div class="quiet-callout"><strong>Before you publish</strong><br>'
@@ -297,9 +280,9 @@ def board_page() -> None:
     )
     if notice := st.session_state.pop("claim_notice", None):
         if notice == "claimed":
-            st.success("Food claimed. Please collect it before the listed deadline.")
+            ui.alert("Pickup claimed", "Please collect it before the listed deadline.", key="claim_success")
         else:
-            st.warning("That listing is no longer available. The board has been refreshed.")
+            ui.alert("Pickup unavailable", "The board has been refreshed. Choose another listing.", key="claim_unavailable")
     live_board()
 
 
@@ -316,9 +299,11 @@ def live_board() -> None:
     st.write("")
 
     if not listings:
-        with st.container(border=True):
-            st.markdown('<div class="section-heading">Nothing available right now</div>', unsafe_allow_html=True)
-            st.caption("New pickups appear here as soon as cafeteria staff publish them.")
+        ui.card(
+            title="Nothing available right now",
+            content="New pickups appear here as soon as cafeteria staff publish them.",
+            key="empty_board",
+        )
         return
 
     for listing in listings:
@@ -326,7 +311,7 @@ def live_board() -> None:
         with st.container(border=True):
             details, action = st.columns([3.2, 1], vertical_alignment="center", gap="large")
             with details:
-                st.markdown('<span class="tag">AVAILABLE FOR PICKUP</span>', unsafe_allow_html=True)
+                ui.badge("Available for pickup", variant="secondary", key=f"status_{listing['id']}")
                 st.markdown(f'<div class="feed-title">{escape(listing["food_name"])}</div>', unsafe_allow_html=True)
                 st.markdown(
                     f'<div class="feed-meta"><strong>{listing["portions"]} portions</strong>'
@@ -359,11 +344,11 @@ def dashboard_page() -> None:
 
     first, second, third = st.columns(3)
     with first:
-        metric_card("Food diverted", f"{pounds:,.1f} lb", "Estimated weight", accent=True)
+        ui.metric_card("Food diverted", f"{pounds:,.1f} lb", description="Estimated weight", variant="dashboard", key="impact_weight")
     with second:
-        metric_card("Meals shared", f"{meals:,}", "Claimed portions")
+        ui.metric_card("Meals shared", f"{meals:,}", description="Claimed portions", variant="dashboard", key="impact_meals")
     with third:
-        metric_card("Emissions avoided", f"{emissions:,.1f} kg", "Estimated CO₂e")
+        ui.metric_card("Emissions avoided", f"{emissions:,.1f} kg", description="Estimated CO₂e", variant="dashboard", key="impact_emissions")
 
     st.write("")
     st.markdown(
