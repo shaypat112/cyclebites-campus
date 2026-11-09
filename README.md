@@ -2,6 +2,8 @@
 
 A single-file Streamlit prototype for sharing campus surplus food.
 
+The interface uses [streamlit-shadcn-ui](https://streamlit.io/components?category=all) for impact cards, listing badges, and status cards. Its current release requires Streamlit 1.60 or newer; `requirements.txt` installs a compatible version.
+
 ## Run locally
 
 ```bash
