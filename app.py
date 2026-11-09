@@ -132,10 +132,10 @@ def apply_theme() -> None:
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-        :root { --forest: #174e38; --ink: #183a2d; --muted: #65776c; --line: #dfe8df; }
+        :root { --charcoal: #171717; --ink: #171717; --muted: #686868; --line: #e5e5e5; }
         html, body, [data-testid="stApp"] { font-family: 'DM Sans', sans-serif; }
-        [data-testid="stApp"] { background: #f6f8f5; color: var(--ink); }
-        [data-testid="stHeader"] { background: #f6f8f5; }
+        [data-testid="stApp"] { background: #ffffff; color: var(--ink); }
+        [data-testid="stHeader"] { background: #ffffff; }
         [data-testid="stAppDeployButton"] { display: none; }
         [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid var(--line); }
         [data-testid="stSidebar"] > div:first-child { padding-top: 2rem; }
@@ -145,60 +145,60 @@ def apply_theme() -> None:
         h3 { font-size: 1.02rem !important; font-weight: 700 !important; }
         [data-testid="stVerticalBlockBorderWrapper"] { border-radius: 16px !important; }
         [data-testid="stVerticalBlockBorderWrapper"] > div { border-color: var(--line) !important; }
-        [data-testid="stWidgetLabel"] p { color: #314e3d !important; font-weight: 650; font-size: .88rem; }
+        [data-testid="stWidgetLabel"] p { color: #333333 !important; font-weight: 650; font-size: .88rem; }
         [data-baseweb="input"] > div, [data-baseweb="textarea"] > div {
-            background: #fff !important; border-color: #d6e2d8 !important; border-radius: 9px !important;
+            background: #fff !important; border-color: #dddddd !important; border-radius: 9px !important;
         }
         input, textarea { color: var(--ink) !important; }
         div.stButton > button, div.stFormSubmitButton > button {
             min-height: 2.8rem; border-radius: 9px; font-weight: 700; transition: .16s ease;
         }
         div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="primary"] {
-            color: #fff; background: var(--forest); border-color: var(--forest);
+            color: #fff; background: var(--charcoal); border-color: var(--charcoal);
         }
         div.stButton > button[kind="primary"]:hover, div.stFormSubmitButton > button[kind="primary"]:hover {
-            background: #0f402d; border-color: #0f402d;
+            background: #333333; border-color: #333333;
         }
         [data-testid="stSidebar"] div.stButton > button {
             justify-content: flex-start; width: 100%; min-height: 2.75rem;
             padding: .65rem .85rem; box-shadow: none; text-align: left;
         }
         [data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
-            border: 1px solid transparent; background: transparent; color: #496254;
+            border: 1px solid transparent; background: transparent; color: #555555;
         }
         [data-testid="stSidebar"] div.stButton > button[kind="secondary"]:hover {
-            background: #f0f5f0; color: var(--forest);
+            background: #f4f4f4; color: var(--charcoal);
         }
         .brand-row { display: flex; align-items: center; gap: .72rem; }
         .brand-mark { display: grid; place-items: center; width: 37px; height: 37px;
-            border-radius: 11px; background: var(--forest); color: white; font-size: 1.23rem; font-weight: 800; }
+            border-radius: 11px; background: var(--charcoal); color: white; font-size: 1.23rem; font-weight: 800; }
         .brand-name { font: 800 1.18rem 'Manrope', sans-serif; letter-spacing: -.04em; color: var(--ink); }
         .brand-caption { color: var(--muted); font-size: .74rem; margin-top: 1px; }
-        .nav-label { color: #829187; font-size: .67rem; font-weight: 800;
+        .nav-label { color: #888888; font-size: .67rem; font-weight: 800;
             letter-spacing: .14em; text-transform: uppercase; margin: 2.25rem 0 .55rem; }
         .side-foot { border-top: 1px solid var(--line); padding-top: 1rem;
-            color: #718277; font-size: .73rem; line-height: 1.5; }
-        .page-kicker { color: #29724d; font-size: .72rem; font-weight: 800;
+            color: #777777; font-size: .73rem; line-height: 1.5; }
+        .page-kicker { color: #666666; font-size: .72rem; font-weight: 800;
             letter-spacing: .12em; text-transform: uppercase; margin-bottom: .6rem; }
         .page-title { font: 800 clamp(1.85rem, 3.1vw, 2.55rem)/1.13 'Manrope', sans-serif;
             letter-spacing: -.055em; color: var(--ink); margin: 0 0 .65rem; }
-        .page-copy { color: #66776b; font-size: .95rem; line-height: 1.55;
+        .page-copy { color: #666666; font-size: .95rem; line-height: 1.55;
             max-width: 610px; margin: 0; }
         .page-header { margin: .45rem 0 1.85rem; }
         .section-heading { font: 750 1.04rem 'Manrope', sans-serif; color: var(--ink);
             letter-spacing: -.025em; margin: .25rem 0 .75rem; }
         .section-copy { color: var(--muted); font-size: .82rem; margin: -.3rem 0 1rem; }
-        .quiet-callout { background: #eaf4ec; border: 1px solid #d9e9dc; border-radius: 14px;
-            padding: 1.1rem 1.2rem; color: #315c3e; font-size: .86rem; line-height: 1.55; }
-        .quiet-callout strong { color: #164d32; }
+        .quiet-callout { background: #f7f7f7; border: 1px solid #e8e8e8; border-radius: 14px;
+            padding: 1.1rem 1.2rem; color: #4d4d4d; font-size: .86rem; line-height: 1.55; }
+        .quiet-callout strong { color: #171717; }
         .feed-title { color: var(--ink); font: 750 1.1rem 'Manrope', sans-serif;
             letter-spacing: -.03em; margin-bottom: .45rem; }
-        .feed-meta { color: #52695a; font-size: .84rem; margin: .32rem 0; }
-        .feed-note { color: #718277; font-size: .81rem; margin-top: .6rem; }
+        .feed-meta { color: #555555; font-size: .84rem; margin: .32rem 0; }
+        .feed-note { color: #777777; font-size: .81rem; margin-top: .6rem; }
         .list-row { border-bottom: 1px solid var(--line); padding: .85rem 0; }
         .list-row:last-child { border-bottom: 0; }
         .list-primary { color: var(--ink); font-weight: 750; font-size: .9rem; }
-        .list-secondary { color: #75867a; font-size: .76rem; margin-top: .22rem; }
+        .list-secondary { color: #777777; font-size: .76rem; margin-top: .22rem; }
         @media (max-width: 640px) {
             .block-container { padding: 1.3rem 1rem 3rem; }
             .page-header { margin-bottom: 1.4rem; }
@@ -388,7 +388,7 @@ def dashboard_page() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="CycleBites · Campus food rescue", page_icon="🌿", layout="wide")
+    st.set_page_config(page_title="CycleBites · Campus food rescue", page_icon="◼️", layout="wide")
     init_db()
     apply_theme()
     st.session_state.setdefault("role", "Cafeteria staff / Donor")
