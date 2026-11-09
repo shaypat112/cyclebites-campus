@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+import streamlit as st
 
 
 DB_PATH = Path(__file__).with_name("cyclebites.db")
@@ -110,3 +112,130 @@ def impact_totals() -> sqlite3.Row:
             FROM listings WHERE status = 'claimed'
             """
         ).fetchone()
+
+
+def apply_theme() -> None:
+    st.markdown(
+        """
+        <style>
+        @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+        :root { --pine: #174d3b; --mint: #eaf5ee; --ink: #17352a; }
+        html, body, [class*="css"], [data-testid="stApp"] {
+            font-family: 'DM Sans', sans-serif;
+        }
+        [data-testid="stApp"] { background: #f8faf8; color: var(--ink); }
+        [data-testid="stSidebar"] { background: #f0f6f1; border-right: 1px solid #e0eae2; }
+        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #53695b; }
+        .block-container { max-width: 1080px; padding-top: 2.4rem; padding-bottom: 4rem; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; letter-spacing: -0.045em; color: var(--ink); }
+        h1 { font-weight: 800; }
+        div.stButton > button[kind="primary"],
+        div.stFormSubmitButton > button[kind="primary"] {
+            background: var(--pine); border: 1px solid var(--pine);
+            color: white; border-radius: 10px; font-weight: 700;
+        }
+        div.stButton > button[kind="primary"]:hover,
+        div.stFormSubmitButton > button[kind="primary"]:hover {
+            background: #0f3f2f; border-color: #0f3f2f;
+        }
+        div[data-testid="stVerticalBlockBorderWrapper"] > div {
+            border-color: #dfeae2 !important; border-radius: 14px !important;
+            background: #fff;
+        }
+        .eyebrow { color: #39805b; text-transform: uppercase; letter-spacing: .16em;
+            font-size: .73rem; font-weight: 800; margin-bottom: .45rem; }
+        .subtle { color: #66796d; font-size: 1rem; line-height: 1.6; }
+        .brand { font: 800 1.38rem 'Manrope', sans-serif; letter-spacing: -.05em;
+            color: #174d3b; margin: .4rem 0 .15rem; }
+        .brand-dot { display: inline-block; width: 11px; height: 11px;
+            border-radius: 50%; background: #65b781; margin-right: 8px; }
+        .sidebar-note { padding: 1rem; border-radius: 12px; background: #e2f0e5;
+            color: #345d45; font-size: .82rem; line-height: 1.55; }
+        @media (max-width: 640px) {
+            .block-container { padding: 1.3rem 1rem 3rem; }
+            h1 { font-size: 2rem !important; }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def page_header(eyebrow: str, title: str, description: str) -> None:
+    st.markdown(f'<div class="eyebrow">{eyebrow}</div>', unsafe_allow_html=True)
+    st.title(title)
+    st.markdown(f'<p class="subtle">{description}</p>', unsafe_allow_html=True)
+
+
+def donor_page() -> None:
+    page_header(
+        "01 / Share surplus",
+        "Good food deserves a next stop.",
+        "Post safe, ready-to-share food so a campus volunteer or pantry can pick it up.",
+    )
+    st.write("")
+    with st.container(border=True):
+        st.subheader("New food listing")
+        st.caption("All fields marked * are required. Listings disappear after the pickup deadline.")
+        with st.form("new_listing", clear_on_submit=True):
+            food_name = st.text_input("Food item name *", placeholder="e.g., Vegetable grain bowls", max_chars=100)
+            left, right = st.columns(2)
+            with left:
+                portions = st.number_input("Quantity / portions *", min_value=1, max_value=10000, value=12, step=1)
+            with right:
+                location = st.text_input("Pickup location *", placeholder="e.g., North Dining Hall desk", max_chars=150)
+            default_deadline = datetime.now().astimezone() + timedelta(hours=2)
+            date_col, time_col = st.columns(2)
+            with date_col:
+                pickup_date = st.date_input("Pickup deadline date *", value=default_deadline.date(), min_value=datetime.now().date())
+            with time_col:
+                pickup_time = st.time_input("Pickup deadline time *", value=default_deadline.time().replace(second=0, microsecond=0))
+            notes = st.text_area(
+                "Notes",
+                placeholder="Packaging, ingredients, allergens, pickup instructions…",
+                max_chars=500,
+                height=100,
+            )
+            submitted = st.form_submit_button("Publish listing", type="primary", use_container_width=True)
+
+        if submitted:
+            try:
+                deadline = datetime.combine(pickup_date, pickup_time).astimezone()
+                add_listing(food_name, int(portions), location, deadline, notes)
+            except ValueError as error:
+                st.error(str(error))
+            else:
+                st.success("Listing published. It is now visible on the live board.")
+
+
+def main() -> None:
+    st.set_page_config(page_title="CycleBites · Campus food rescue", page_icon="🌿", layout="wide")
+    init_db()
+    apply_theme()
+
+    with st.sidebar:
+        st.markdown('<div class="brand"><span class="brand-dot"></span>CycleBites</div>', unsafe_allow_html=True)
+        st.caption("Campus food rescue, made simple.")
+        st.write("")
+        role = st.radio(
+            "Workspace",
+            ["Cafeteria staff / Donor", "Volunteer / Pantry", "Admin / Teacher"],
+            key="role",
+        )
+        st.write("")
+        st.markdown(
+            '<div class="sidebar-note">Small pickups make a real difference. '
+            'Post early and collect before the listed deadline.</div>',
+            unsafe_allow_html=True,
+        )
+
+    if role == "Cafeteria staff / Donor":
+        donor_page()
+    elif role == "Volunteer / Pantry":
+        st.info("The live pickup board is coming next.")
+    else:
+        st.info("The impact dashboard is coming next.")
+
+
+if __name__ == "__main__":
+    main()
