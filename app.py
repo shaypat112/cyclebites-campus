@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from html import escape
@@ -12,6 +13,8 @@ import streamlit_shadcn_ui as ui
 
 
 DB_PATH = Path(__file__).with_name("cyclebites.db")
+LOGO_PATH = Path(__file__).parent / "assets" / "cyclebites-logo.svg"
+LOGO_DATA_URI = "data:image/svg+xml;base64," + base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
 POUNDS_PER_PORTION = 0.75  # A transparent planning estimate, not a measured weight.
 KG_CO2E_PER_POUND = 0.25  # EPA WARM v16: 0.50 metric tons / short ton landfilled.
 
@@ -170,8 +173,7 @@ def apply_theme() -> None:
             background: #f4f4f4; color: var(--charcoal);
         }
         .brand-row { display: flex; align-items: center; gap: .72rem; }
-        .brand-mark { display: grid; place-items: center; width: 37px; height: 37px;
-            border-radius: 11px; background: var(--charcoal); color: white; font-size: 1.23rem; font-weight: 800; }
+        .brand-mark { display: block; width: 37px; height: 37px; flex: none; }
         .brand-name { font: 800 1.18rem 'Manrope', sans-serif; letter-spacing: -.04em; color: var(--ink); }
         .brand-caption { color: var(--muted); font-size: .74rem; margin-top: 1px; }
         .nav-label { color: #888888; font-size: .67rem; font-weight: 800;
@@ -388,14 +390,15 @@ def dashboard_page() -> None:
 
 
 def main() -> None:
-    st.set_page_config(page_title="CycleBites · Campus food rescue", page_icon="◼️", layout="wide")
+    st.set_page_config(page_title="CycleBites · Campus food rescue", page_icon=str(LOGO_PATH), layout="wide")
     init_db()
     apply_theme()
     st.session_state.setdefault("role", "Cafeteria staff / Donor")
 
     with st.sidebar:
         st.markdown(
-            '<div class="brand-row"><div class="brand-mark">C</div><div>'
+            f'<div class="brand-row"><img class="brand-mark" src="{LOGO_DATA_URI}" '
+            'alt="CycleBites food sharing logo"><div>'
             '<div class="brand-name">CycleBites</div>'
             '<div class="brand-caption">Campus food rescue</div></div></div>',
             unsafe_allow_html=True,
