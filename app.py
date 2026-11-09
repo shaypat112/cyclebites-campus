@@ -208,6 +208,57 @@ def donor_page() -> None:
                 st.success("Listing published. It is now visible on the live board.")
 
 
+def board_page() -> None:
+    page_header(
+        "02 / Pick up food",
+        "Fresh opportunities, right now.",
+        "Browse available campus surplus and claim a pickup before its deadline.",
+    )
+    if notice := st.session_state.pop("claim_notice", None):
+        if notice == "claimed":
+            st.success("Food claimed. Please collect it before the listed deadline.")
+        else:
+            st.warning("That listing is no longer available. The board has been refreshed.")
+    st.caption("The board refreshes automatically every 15 seconds.")
+    live_board()
+
+
+@st.fragment(run_every="15s")
+def live_board() -> None:
+    listings = active_listings()
+    count_col, portions_col = st.columns(2)
+    with count_col:
+        st.metric("Available pickups", len(listings))
+    with portions_col:
+        st.metric("Portions ready", sum(row["portions"] for row in listings))
+    st.divider()
+
+    if not listings:
+        with st.container(border=True):
+            st.subheader("All caught up")
+            st.write("There are no active pickups right now. Check back soon for new food.")
+        return
+
+    for listing in listings:
+        deadline = datetime.fromisoformat(listing["expires_at"]).astimezone()
+        with st.container(border=True):
+            details, action = st.columns([3, 1], vertical_alignment="center")
+            with details:
+                st.subheader(listing["food_name"])
+                st.write(f"**{listing['portions']} portions**  ·  📍 {listing['pickup_location']}")
+                st.caption(f"Pickup by {deadline.strftime('%b %-d, %Y at %-I:%M %p')}")
+                if listing["notes"]:
+                    st.write(listing["notes"])
+            with action:
+                if st.button(
+                    "Claim food", key=f"claim_{listing['id']}",
+                    type="primary", use_container_width=True,
+                ):
+                    claimed = claim_listing(listing["id"])
+                    st.session_state["claim_notice"] = "claimed" if claimed else "unavailable"
+                    st.rerun()
+
+
 def main() -> None:
     st.set_page_config(page_title="CycleBites · Campus food rescue", page_icon="🌿", layout="wide")
     init_db()
@@ -232,7 +283,7 @@ def main() -> None:
     if role == "Cafeteria staff / Donor":
         donor_page()
     elif role == "Volunteer / Pantry":
-        st.info("The live pickup board is coming next.")
+        board_page()
     else:
         st.info("The impact dashboard is coming next.")
 
