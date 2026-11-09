@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from datetime import datetime, timedelta, timezone
+from html import escape
 from pathlib import Path
 
 import streamlit as st
@@ -130,41 +131,87 @@ def apply_theme() -> None:
         """
         <style>
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
-        :root { --pine: #174d3b; --mint: #eaf5ee; --ink: #17352a; }
-        html, body, [class*="css"], [data-testid="stApp"] {
-            font-family: 'DM Sans', sans-serif;
+        :root { --forest: #174e38; --ink: #183a2d; --muted: #65776c; --line: #dfe8df; }
+        html, body, [data-testid="stApp"] { font-family: 'DM Sans', sans-serif; }
+        [data-testid="stApp"] { background: #f6f8f5; color: var(--ink); }
+        [data-testid="stHeader"] { background: #f6f8f5; }
+        [data-testid="stAppDeployButton"] { display: none; }
+        [data-testid="stSidebar"] { background: #ffffff; border-right: 1px solid var(--line); }
+        [data-testid="stSidebar"] > div:first-child { padding-top: 2rem; }
+        .block-container { max-width: 1120px; padding: 2.1rem 2.7rem 4rem; }
+        h1, h2, h3 { font-family: 'Manrope', sans-serif; color: var(--ink); letter-spacing: -.035em; }
+        h2 { font-size: 1.18rem !important; font-weight: 750 !important; }
+        h3 { font-size: 1.02rem !important; font-weight: 700 !important; }
+        [data-testid="stVerticalBlockBorderWrapper"] { border-radius: 16px !important; }
+        [data-testid="stVerticalBlockBorderWrapper"] > div { border-color: var(--line) !important; }
+        [data-testid="stWidgetLabel"] p { color: #314e3d !important; font-weight: 650; font-size: .88rem; }
+        [data-baseweb="input"] > div, [data-baseweb="textarea"] > div {
+            background: #fff !important; border-color: #d6e2d8 !important; border-radius: 9px !important;
         }
-        [data-testid="stApp"] { background: #f8faf8; color: var(--ink); }
-        [data-testid="stSidebar"] { background: #f0f6f1; border-right: 1px solid #e0eae2; }
-        [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p { color: #53695b; }
-        .block-container { max-width: 1080px; padding-top: 2.4rem; padding-bottom: 4rem; }
-        h1, h2, h3 { font-family: 'Manrope', sans-serif; letter-spacing: -0.045em; color: var(--ink); }
-        h1 { font-weight: 800; }
-        div.stButton > button[kind="primary"],
-        div.stFormSubmitButton > button[kind="primary"] {
-            background: var(--pine); border: 1px solid var(--pine);
-            color: white; border-radius: 10px; font-weight: 700;
+        input, textarea { color: var(--ink) !important; }
+        div.stButton > button, div.stFormSubmitButton > button {
+            min-height: 2.8rem; border-radius: 9px; font-weight: 700; transition: .16s ease;
         }
-        div.stButton > button[kind="primary"]:hover,
-        div.stFormSubmitButton > button[kind="primary"]:hover {
-            background: #0f3f2f; border-color: #0f3f2f;
+        div.stButton > button[kind="primary"], div.stFormSubmitButton > button[kind="primary"] {
+            color: #fff; background: var(--forest); border-color: var(--forest);
         }
-        div[data-testid="stVerticalBlockBorderWrapper"] > div {
-            border-color: #dfeae2 !important; border-radius: 14px !important;
-            background: #fff;
+        div.stButton > button[kind="primary"]:hover, div.stFormSubmitButton > button[kind="primary"]:hover {
+            background: #0f402d; border-color: #0f402d;
         }
-        .eyebrow { color: #39805b; text-transform: uppercase; letter-spacing: .16em;
-            font-size: .73rem; font-weight: 800; margin-bottom: .45rem; }
-        .subtle { color: #66796d; font-size: 1rem; line-height: 1.6; }
-        .brand { font: 800 1.38rem 'Manrope', sans-serif; letter-spacing: -.05em;
-            color: #174d3b; margin: .4rem 0 .15rem; }
-        .brand-dot { display: inline-block; width: 11px; height: 11px;
-            border-radius: 50%; background: #65b781; margin-right: 8px; }
-        .sidebar-note { padding: 1rem; border-radius: 12px; background: #e2f0e5;
-            color: #345d45; font-size: .82rem; line-height: 1.55; }
+        [data-testid="stSidebar"] div.stButton > button {
+            justify-content: flex-start; width: 100%; min-height: 2.75rem;
+            padding: .65rem .85rem; box-shadow: none; text-align: left;
+        }
+        [data-testid="stSidebar"] div.stButton > button[kind="secondary"] {
+            border: 1px solid transparent; background: transparent; color: #496254;
+        }
+        [data-testid="stSidebar"] div.stButton > button[kind="secondary"]:hover {
+            background: #f0f5f0; color: var(--forest);
+        }
+        .brand-row { display: flex; align-items: center; gap: .72rem; }
+        .brand-mark { display: grid; place-items: center; width: 37px; height: 37px;
+            border-radius: 11px; background: var(--forest); color: white; font-size: 1.23rem; font-weight: 800; }
+        .brand-name { font: 800 1.18rem 'Manrope', sans-serif; letter-spacing: -.04em; color: var(--ink); }
+        .brand-caption { color: var(--muted); font-size: .74rem; margin-top: 1px; }
+        .nav-label { color: #829187; font-size: .67rem; font-weight: 800;
+            letter-spacing: .14em; text-transform: uppercase; margin: 2.25rem 0 .55rem; }
+        .side-foot { border-top: 1px solid var(--line); padding-top: 1rem;
+            color: #718277; font-size: .73rem; line-height: 1.5; }
+        .page-kicker { color: #29724d; font-size: .72rem; font-weight: 800;
+            letter-spacing: .12em; text-transform: uppercase; margin-bottom: .6rem; }
+        .page-title { font: 800 clamp(1.85rem, 3.1vw, 2.55rem)/1.13 'Manrope', sans-serif;
+            letter-spacing: -.055em; color: var(--ink); margin: 0 0 .65rem; }
+        .page-copy { color: #66776b; font-size: .95rem; line-height: 1.55;
+            max-width: 610px; margin: 0; }
+        .page-header { margin: .45rem 0 1.85rem; }
+        .section-heading { font: 750 1.04rem 'Manrope', sans-serif; color: var(--ink);
+            letter-spacing: -.025em; margin: .25rem 0 .75rem; }
+        .section-copy { color: var(--muted); font-size: .82rem; margin: -.3rem 0 1rem; }
+        .metric-card { background: #fff; border: 1px solid var(--line); border-radius: 15px;
+            padding: 1.25rem 1.3rem; min-height: 142px; box-shadow: 0 2px 8px #173b2606; }
+        .metric-label { color: #627569; font-size: .78rem; font-weight: 700; }
+        .metric-value { color: var(--ink); font: 800 clamp(1.7rem, 2.3vw, 2.15rem) 'Manrope', sans-serif;
+            letter-spacing: -.055em; margin: .5rem 0 .35rem; white-space: nowrap; }
+        .metric-detail { color: #849187; font-size: .74rem; }
+        .metric-card.accent { background: #eaf4ec; border-color: #d9e9dc; }
+        .quiet-callout { background: #eaf4ec; border: 1px solid #d9e9dc; border-radius: 14px;
+            padding: 1.1rem 1.2rem; color: #315c3e; font-size: .86rem; line-height: 1.55; }
+        .quiet-callout strong { color: #164d32; }
+        .feed-title { color: var(--ink); font: 750 1.1rem 'Manrope', sans-serif;
+            letter-spacing: -.03em; margin-bottom: .45rem; }
+        .feed-meta { color: #52695a; font-size: .84rem; margin: .32rem 0; }
+        .feed-note { color: #718277; font-size: .81rem; margin-top: .6rem; }
+        .tag { display: inline-block; background: #eaf4ec; color: #276747; border-radius: 99px;
+            padding: .28rem .6rem; font-size: .7rem; font-weight: 750; margin-bottom: .8rem; }
+        .list-row { border-bottom: 1px solid var(--line); padding: .85rem 0; }
+        .list-row:last-child { border-bottom: 0; }
+        .list-primary { color: var(--ink); font-weight: 750; font-size: .9rem; }
+        .list-secondary { color: #75867a; font-size: .76rem; margin-top: .22rem; }
         @media (max-width: 640px) {
             .block-container { padding: 1.3rem 1rem 3rem; }
-            h1 { font-size: 2rem !important; }
+            .page-header { margin-bottom: 1.4rem; }
+            .metric-card { min-height: 0; padding: 1rem; }
+            .metric-value { font-size: 1.55rem; }
         }
         </style>
         """,
@@ -173,96 +220,125 @@ def apply_theme() -> None:
 
 
 def page_header(eyebrow: str, title: str, description: str) -> None:
-    st.markdown(f'<div class="eyebrow">{eyebrow}</div>', unsafe_allow_html=True)
-    st.title(title)
-    st.markdown(f'<p class="subtle">{description}</p>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="page-header"><div class="page-kicker">{escape(eyebrow)}</div>'
+        f'<h1 class="page-title">{escape(title)}</h1>'
+        f'<p class="page-copy">{escape(description)}</p></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def metric_card(label: str, value: str, detail: str, *, accent: bool = False) -> None:
+    variant = " accent" if accent else ""
+    st.markdown(
+        f'<div class="metric-card{variant}"><div class="metric-label">{escape(label)}</div>'
+        f'<div class="metric-value">{escape(value)}</div>'
+        f'<div class="metric-detail">{escape(detail)}</div></div>',
+        unsafe_allow_html=True,
+    )
 
 
 def donor_page() -> None:
     page_header(
-        "01 / Share surplus",
-        "Good food deserves a next stop.",
-        "Post safe, ready-to-share food so a campus volunteer or pantry can pick it up.",
+        "Cafeteria / Share food",
+        "Post a surplus pickup",
+        "Add a clear pickup window so volunteers and pantry partners can collect food in time.",
     )
-    st.write("")
-    with st.container(border=True):
-        st.subheader("New food listing")
-        st.caption("All fields marked * are required. Listings disappear after the pickup deadline.")
-        with st.form("new_listing", clear_on_submit=True):
-            food_name = st.text_input("Food item name *", placeholder="e.g., Vegetable grain bowls", max_chars=100)
-            left, right = st.columns(2)
-            with left:
-                portions = st.number_input("Quantity / portions *", min_value=1, max_value=10000, value=12, step=1)
-            with right:
-                location = st.text_input("Pickup location *", placeholder="e.g., North Dining Hall desk", max_chars=150)
-            default_deadline = datetime.now().astimezone() + timedelta(hours=2)
-            date_col, time_col = st.columns(2)
-            with date_col:
-                pickup_date = st.date_input("Pickup deadline date *", value=default_deadline.date(), min_value=datetime.now().date())
-            with time_col:
-                pickup_time = st.time_input("Pickup deadline time *", value=default_deadline.time().replace(second=0, microsecond=0))
-            notes = st.text_area(
-                "Notes",
-                placeholder="Packaging, ingredients, allergens, pickup instructions…",
-                max_chars=500,
-                height=100,
-            )
-            submitted = st.form_submit_button("Publish listing", type="primary", use_container_width=True)
+    form_area, side_area = st.columns([2.2, 1], gap="large")
+    with form_area:
+        with st.container(border=True):
+            st.markdown('<div class="section-heading">Pickup details</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-copy">Keep it concise. Volunteers see these details on the live board.</div>', unsafe_allow_html=True)
+            with st.form("new_listing", clear_on_submit=True):
+                food_name = st.text_input("Food item name *", placeholder="e.g. Vegetable grain bowls", max_chars=100)
+                left, right = st.columns(2)
+                with left:
+                    portions = st.number_input("Portions available *", min_value=1, max_value=10000, value=12, step=1)
+                with right:
+                    location = st.text_input("Pickup location *", placeholder="e.g. North Dining Hall", max_chars=150)
+                default_deadline = datetime.now().astimezone() + timedelta(hours=2)
+                date_col, time_col = st.columns(2)
+                with date_col:
+                    pickup_date = st.date_input("Pickup date *", value=default_deadline.date(), min_value=datetime.now().date())
+                with time_col:
+                    pickup_time = st.time_input("Pickup by *", value=default_deadline.time().replace(second=0, microsecond=0))
+                notes = st.text_area(
+                    "Notes for pickup",
+                    placeholder="Ingredients, allergens, packaging, or pickup instructions",
+                    max_chars=500,
+                    height=86,
+                )
+                submitted = st.form_submit_button("Publish pickup →", type="primary", use_container_width=True)
 
-        if submitted:
-            try:
-                deadline = datetime.combine(pickup_date, pickup_time).astimezone()
-                add_listing(food_name, int(portions), location, deadline, notes)
-            except ValueError as error:
-                st.error(str(error))
-            else:
-                st.success("Listing published. It is now visible on the live board.")
+            if submitted:
+                try:
+                    deadline = datetime.combine(pickup_date, pickup_time).astimezone()
+                    add_listing(food_name, int(portions), location, deadline, notes)
+                except ValueError as error:
+                    st.error(str(error))
+                else:
+                    st.success("Pickup published. It is visible on the live board.")
+    with side_area:
+        metric_card("Live pickups", str(len(active_listings())), "Currently available on campus", accent=True)
+        st.write("")
+        st.markdown(
+            '<div class="quiet-callout"><strong>Before you publish</strong><br>'
+            'Share only food that is safe to eat. Add allergen details in the notes, '
+            'and choose a realistic collection deadline.</div>',
+            unsafe_allow_html=True,
+        )
 
 
 def board_page() -> None:
     page_header(
-        "02 / Pick up food",
-        "Fresh opportunities, right now.",
-        "Browse available campus surplus and claim a pickup before its deadline.",
+        "Volunteer / Available food",
+        "Find a pickup",
+        "Claim available food for a campus volunteer team or pantry partner.",
     )
     if notice := st.session_state.pop("claim_notice", None):
         if notice == "claimed":
             st.success("Food claimed. Please collect it before the listed deadline.")
         else:
             st.warning("That listing is no longer available. The board has been refreshed.")
-    st.caption("The board refreshes automatically every 15 seconds.")
     live_board()
 
 
 @st.fragment(run_every="15s")
 def live_board() -> None:
     listings = active_listings()
-    count_col, portions_col = st.columns(2)
-    with count_col:
-        st.metric("Available pickups", len(listings))
-    with portions_col:
-        st.metric("Portions ready", sum(row["portions"] for row in listings))
-    st.divider()
+    available_portions = sum(row["portions"] for row in listings)
+    st.markdown(
+        f'<div class="quiet-callout"><strong>{len(listings)} active pickups</strong>'
+        f' &nbsp;·&nbsp; {available_portions} portions available'
+        ' &nbsp;·&nbsp; Refreshes every 15 seconds</div>',
+        unsafe_allow_html=True,
+    )
+    st.write("")
 
     if not listings:
         with st.container(border=True):
-            st.subheader("All caught up")
-            st.write("There are no active pickups right now. Check back soon for new food.")
+            st.markdown('<div class="section-heading">Nothing available right now</div>', unsafe_allow_html=True)
+            st.caption("New pickups appear here as soon as cafeteria staff publish them.")
         return
 
     for listing in listings:
         deadline = datetime.fromisoformat(listing["expires_at"]).astimezone()
         with st.container(border=True):
-            details, action = st.columns([3, 1], vertical_alignment="center")
+            details, action = st.columns([3.2, 1], vertical_alignment="center", gap="large")
             with details:
-                st.subheader(listing["food_name"])
-                st.write(f"**{listing['portions']} portions**  ·  📍 {listing['pickup_location']}")
-                st.caption(f"Pickup by {deadline.strftime('%b %-d, %Y at %-I:%M %p')}")
+                st.markdown('<span class="tag">AVAILABLE FOR PICKUP</span>', unsafe_allow_html=True)
+                st.markdown(f'<div class="feed-title">{escape(listing["food_name"])}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="feed-meta"><strong>{listing["portions"]} portions</strong>'
+                    f' &nbsp;·&nbsp; {escape(listing["pickup_location"])}</div>'
+                    f'<div class="feed-meta">Pickup by {escape(deadline.strftime("%b %d, %I:%M %p"))}</div>',
+                    unsafe_allow_html=True,
+                )
                 if listing["notes"]:
-                    st.write(listing["notes"])
+                    st.markdown(f'<div class="feed-note">{escape(listing["notes"])}</div>', unsafe_allow_html=True)
             with action:
                 if st.button(
-                    "Claim food", key=f"claim_{listing['id']}",
+                    "Claim pickup →", key=f"claim_{listing['id']}",
                     type="primary", use_container_width=True,
                 ):
                     claimed = claim_listing(listing["id"])
@@ -272,9 +348,9 @@ def live_board() -> None:
 
 def dashboard_page() -> None:
     page_header(
-        "03 / Community impact",
-        "A lighter footprint, together.",
-        "A simple view of the food claimed through CycleBites and its estimated impact.",
+        "Admin / Impact overview",
+        "Campus impact",
+        "A clear snapshot of claimed food and estimated waste reduction.",
     )
     totals = impact_totals()
     meals = int(totals["meals_shared"])
@@ -283,76 +359,86 @@ def dashboard_page() -> None:
 
     first, second, third = st.columns(3)
     with first:
-        with st.container(border=True):
-            st.metric("Food diverted", f"{pounds:,.1f} lb")
-            st.caption("Estimated from claimed portions")
+        metric_card("Food diverted", f"{pounds:,.1f} lb", "Estimated weight", accent=True)
     with second:
-        with st.container(border=True):
-            st.metric("Meals shared", f"{meals:,}")
-            st.caption("One claimed portion = one meal")
+        metric_card("Meals shared", f"{meals:,}", "Claimed portions")
     with third:
-        with st.container(border=True):
-            st.metric("Landfill emissions avoided", f"{emissions:,.1f} kg CO₂e")
-            st.caption("Illustrative greenhouse gas estimate")
+        metric_card("Emissions avoided", f"{emissions:,.1f} kg", "Estimated CO₂e")
+
+    st.write("")
+    st.markdown(
+        f'<div class="quiet-callout"><strong>{totals["claimed_listings"]:,} pickups claimed</strong>'
+        ' &nbsp;·&nbsp; Every claimed portion is counted as one shared meal in this prototype.</div>',
+        unsafe_allow_html=True,
+    )
 
     st.write("")
     with st.container(border=True):
-        st.subheader("Why this matters")
+        st.markdown('<div class="section-heading">Recent claims</div>', unsafe_allow_html=True)
+        claims = recent_claims()
+        if not claims:
+            st.caption("No pickups claimed yet. Activity will appear here once the first item is reserved.")
+        else:
+            for claim in claims:
+                claimed_at = datetime.fromisoformat(claim["claimed_at"]).astimezone()
+                st.markdown(
+                    f'<div class="list-row"><div class="list-primary">{escape(claim["food_name"])}'
+                    f' · {claim["portions"]} portions</div><div class="list-secondary">'
+                    f'{escape(claim["pickup_location"])} &nbsp;·&nbsp; '
+                    f'{escape(claimed_at.strftime("%b %d, %I:%M %p"))}</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+    with st.expander("How these estimates are calculated"):
         st.write(
-            "When edible food reaches people instead of a landfill, the campus reduces "
-            "potential methane emissions and makes better use of the resources behind each meal."
+            "Food weight uses an assumed 0.75 lb per portion. Emissions use 0.25 kg CO₂e "
+            "per pound, derived from the U.S. EPA WARM v16 national-average food-waste "
+            "landfilling factor (0.50 metric tons CO₂e per short ton). Claims stand in for "
+            "completed pickups; actual outcomes may differ."
         )
-        st.caption(f"{totals['claimed_listings']:,} successful claims recorded so far.")
-
-    st.write("")
-    st.subheader("Recent pickups")
-    claims = recent_claims()
-    if not claims:
-        st.caption("Claims will appear here as soon as the first pickup is reserved.")
-    else:
-        for claim in claims:
-            claimed_at = datetime.fromisoformat(claim["claimed_at"]).astimezone()
-            with st.container(border=True):
-                label, when = st.columns([3, 1], vertical_alignment="center")
-                with label:
-                    st.write(f"**{claim['food_name']}** · {claim['portions']} portions")
-                    st.caption(claim["pickup_location"])
-                with when:
-                    st.caption(claimed_at.strftime("%b %d · %I:%M %p"))
-
-    st.write("")
-    st.caption(
-        "Method: 0.75 lb per portion is an app planning assumption. The emissions estimate "
-        "uses 0.25 kg CO₂e per pound, derived from the U.S. EPA WARM v16 national-average "
-        "food-waste landfilling factor (0.50 metric tons CO₂e per short ton). "
-        "Claims are used as a proxy for completed pickups; actual outcomes may differ."
-    )
-    st.markdown(
-        "[Read the EPA WARM food waste methodology]"
-        "(https://www.epa.gov/system/files/documents/2023-12/warm_organic_materials_v16_dec.pdf)"
-    )
+        st.markdown(
+            "[EPA WARM food-waste methodology]"
+            "(https://www.epa.gov/system/files/documents/2023-12/warm_organic_materials_v16_dec.pdf)"
+        )
 
 
 def main() -> None:
     st.set_page_config(page_title="CycleBites · Campus food rescue", page_icon="🌿", layout="wide")
     init_db()
     apply_theme()
+    st.session_state.setdefault("role", "Cafeteria staff / Donor")
 
     with st.sidebar:
-        st.markdown('<div class="brand"><span class="brand-dot"></span>CycleBites</div>', unsafe_allow_html=True)
-        st.caption("Campus food rescue, made simple.")
-        st.write("")
-        role = st.radio(
-            "Workspace",
-            ["Cafeteria staff / Donor", "Volunteer / Pantry", "Admin / Teacher"],
-            key="role",
-        )
-        st.write("")
         st.markdown(
-            '<div class="sidebar-note">Small pickups make a real difference. '
-            'Post early and collect before the listed deadline.</div>',
+            '<div class="brand-row"><div class="brand-mark">C</div><div>'
+            '<div class="brand-name">CycleBites</div>'
+            '<div class="brand-caption">Campus food rescue</div></div></div>',
             unsafe_allow_html=True,
         )
+        st.markdown(
+            '<div class="nav-label">Workspace</div>',
+            unsafe_allow_html=True,
+        )
+        for label, button_text in (
+            ("Cafeteria staff / Donor", "Share food"),
+            ("Volunteer / Pantry", "Available pickups"),
+            ("Admin / Teacher", "Impact dashboard"),
+        ):
+            if st.button(
+                button_text,
+                key=f"nav_{label}",
+                type="primary" if st.session_state["role"] == label else "secondary",
+                use_container_width=True,
+            ):
+                st.session_state["role"] = label
+                st.rerun()
+        st.write("")
+        st.markdown(
+            '<div class="side-foot">CycleBites pilot<br>Food shared is food valued.</div>',
+            unsafe_allow_html=True,
+        )
+
+    role = st.session_state["role"]
 
     if role == "Cafeteria staff / Donor":
         donor_page()
