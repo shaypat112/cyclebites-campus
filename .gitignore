@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.venv/
+cyclebites.db
+cyclebites.db-shm
+cyclebites.db-wal
