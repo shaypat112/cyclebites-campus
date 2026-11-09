@@ -2,7 +2,7 @@
 
 A single-file Streamlit prototype for sharing campus surplus food.
 
-The interface uses [streamlit-shadcn-ui](https://streamlit.io/components?category=all) for impact cards, listing badges, and status cards. Its current release requires Streamlit 1.60 or newer; `requirements.txt` installs a compatible version.
+The interface uses [streamlit-shadcn-ui](https://streamlit.io/components?category=all) for impact cards, listing badges, and status cards, plus [streamlit-searchbox](https://github.com/m-wrzr/streamlit-searchbox) for live pickup place suggestions. `requirements.txt` installs a compatible Streamlit version.
 
 ## Run locally
 
@@ -16,6 +16,7 @@ Open the local URL printed by Streamlit. Use the sidebar to switch between donor
 ## Prototype behavior
 
 - Listings have a pickup deadline and disappear from the active board when it passes.
+- Donors can search for a pickup place as they type. Suggestions come from [Photon](https://github.com/komoot/photon) using OpenStreetMap data. They can edit the selected address to add a room or entrance, or enter a campus location manually. Search starts after three characters, is debounced and cached, and falls back to manual entry if the service is unavailable.
 - The board refreshes every 15 seconds. Claiming is atomic, so only one claimant can reserve a listing.
 - Admin totals count claimed portions. The weight estimate uses 0.75 lb per portion; the emissions estimate uses the [EPA WARM v16](https://www.epa.gov/system/files/documents/2023-12/warm_organic_materials_v16_dec.pdf) national-average food-waste landfilling factor. Both are estimates, and a claim is treated as a proxy for a completed pickup.
 - Role switching is for demonstration and does not authenticate users.

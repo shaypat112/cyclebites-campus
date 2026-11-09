@@ -3,12 +3,23 @@
 from __future__ import annotations
 
 import base64
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 import streamlit as st
+
+try:
+    from streamlit_searchbox import st_searchbox
+except ModuleNotFoundError as error:
+    if error.name != "streamlit_searchbox":
+        raise
+    st_searchbox = None
 
 if tuple(map(int, st.__version__.split(".")[:2])) >= (1, 60):
     try:
@@ -26,6 +37,35 @@ LOGO_PATH = Path(__file__).parent / "assets" / "cyclebites-logo.svg"
 LOGO_DATA_URI = "data:image/svg+xml;base64," + base64.b64encode(LOGO_PATH.read_bytes()).decode("ascii")
 POUNDS_PER_PORTION = 0.75  # A transparent planning estimate, not a measured weight.
 KG_CO2E_PER_POUND = 0.25  # EPA WARM v16: 0.50 metric tons / short ton landfilled.
+PHOTON_API = "https://photon.komoot.io/api/"
+
+
+def format_place(properties: dict) -> str:
+    """Turn a Photon result into a concise, unambiguous pickup address."""
+    street = " ".join(str(properties.get(key, "")).strip() for key in ("housenumber", "street")).strip()
+    parts = [properties.get("name"), street, properties.get("city") or properties.get("district"), properties.get("state")]
+    return ", ".join(str(part).strip() for part in parts if part and str(part).strip())
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def search_places(searchterm: str) -> list[str]:
+    """Query Photon's public search-as-you-type demo conservatively."""
+    query = searchterm.strip()
+    if len(query) < 3:
+        return []
+    request = Request(
+        PHOTON_API + "?" + urlencode({"q": query, "limit": 5, "lang": "en"}),
+        headers={"User-Agent": "CycleBites/1.0 (https://github.com/shaypat112/cyclebites-campus)"},
+    )
+    try:
+        with urlopen(request, timeout=4) as response:
+            features = json.load(response).get("features", [])
+    except (HTTPError, URLError, TimeoutError, ValueError, OSError):
+        return []
+    return list(dict.fromkeys(
+        label for feature in features
+        if (label := format_place(feature.get("properties", {})))
+    ))
 
 
 def utc_now() -> datetime:
@@ -285,13 +325,31 @@ def donor_page() -> None:
         with st.container(border=True):
             st.markdown('<div class="section-heading">Pickup details</div>', unsafe_allow_html=True)
             st.markdown('<div class="section-copy">Keep it concise. Volunteers see these details on the live board.</div>', unsafe_allow_html=True)
+            selected_place = None
+            if st_searchbox is not None:
+                selected_place = st_searchbox(
+                    search_places,
+                    key="pickup_place_search",
+                    label="Find a place on the map",
+                    placeholder="Search a building or street address...",
+                    debounce=450,
+                    clear_on_submit=False,
+                    edit_after_submit="option",
+                )
+                st.caption("Place search by Photon · © OpenStreetMap contributors. Type at least 3 characters.")
+            if selected_place and selected_place != st.session_state.get("last_selected_place"):
+                st.session_state["pickup_location"] = selected_place
+                st.session_state["last_selected_place"] = selected_place
+            location = st.text_input(
+                "Pickup location *",
+                key="pickup_location",
+                placeholder="e.g. North Dining Hall, room 104",
+                max_chars=150,
+                help="Choose a map result above, then add a room or entrance; or type a campus location manually.",
+            )
             with st.form("new_listing", clear_on_submit=True):
                 food_name = st.text_input("Food item name *", placeholder="e.g. Vegetable grain bowls", max_chars=100)
-                left, right = st.columns(2)
-                with left:
-                    portions = st.number_input("Portions available *", min_value=1, max_value=10000, value=12, step=1)
-                with right:
-                    location = st.text_input("Pickup location *", placeholder="e.g. North Dining Hall", max_chars=150)
+                portions = st.number_input("Portions available *", min_value=1, max_value=10000, value=12, step=1)
                 default_deadline = datetime.now().astimezone() + timedelta(hours=2)
                 date_col, time_col = st.columns(2)
                 with date_col:
