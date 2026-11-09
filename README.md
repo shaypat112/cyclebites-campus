@@ -2,7 +2,7 @@
 
 A single-file Streamlit prototype for sharing campus surplus food.
 
-The interface uses [streamlit-shadcn-ui](https://streamlit.io/components?category=all) for impact cards, listing badges, and status cards, plus [streamlit-searchbox](https://github.com/m-wrzr/streamlit-searchbox) for live pickup place suggestions. `requirements.txt` installs a compatible Streamlit version.
+The interface uses [streamlit-shadcn-ui](https://streamlit.io/components?category=all) for impact cards, listing badges, and status cards, [streamlit-searchbox](https://github.com/m-wrzr/streamlit-searchbox) for live pickup place suggestions, and [streamlit-folium](https://github.com/randyzwitch/streamlit-folium) for an interactive Leaflet map. `requirements.txt` installs a compatible Streamlit version.
 
 ## Run locally
 
@@ -17,6 +17,8 @@ Open the local URL printed by Streamlit. Use the sidebar to switch between donor
 
 - Listings have a pickup deadline and disappear from the active board when it passes.
 - Donors can search for a pickup place as they type. Suggestions come from [Photon](https://github.com/komoot/photon) using OpenStreetMap data. They can edit the selected address to add a room or entrance, or enter a campus location manually. Search starts after three characters, is debounced and cached, and falls back to manual entry if the service is unavailable.
+- Map & routes shows pinned available pickups, ranks them by straight-line distance from a device, searched, or map-clicked starting point, and lets volunteers claim from the map. Device location requires a deliberate browser permission click. New posts are pinned when the donor selects a mapped place; manually entered locations still appear on the live board but cannot be mapped until a place is selected. Existing SQLite databases gain nullable coordinate columns automatically.
+- A button searches for nearby mapped food banks and pantries using bounded Photon queries. These are possible partners, not verified requests for food; contact them before delivery. Walking route lines and distance/time estimates come from the [FOSSGIS OSRM demo service](https://test.project-osrm.org/about.html), with a Google Maps turn-by-turn link. Public demo services can be unavailable or rate limited.
 - The board refreshes every 15 seconds. Claiming is atomic, so only one claimant can reserve a listing.
 - Admin totals count claimed portions. The weight estimate uses 0.75 lb per portion; the emissions estimate uses the [EPA WARM v16](https://www.epa.gov/system/files/documents/2023-12/warm_organic_materials_v16_dec.pdf) national-average food-waste landfilling factor. Both are estimates, and a claim is treated as a proxy for a completed pickup.
 - Role switching is for demonstration and does not authenticate users.

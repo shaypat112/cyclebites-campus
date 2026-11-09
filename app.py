@@ -3,16 +3,24 @@
 from __future__ import annotations
 
 import base64
-import json
+import math
 import sqlite3
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
-from urllib.request import Request, urlopen
 
+import requests
 import streamlit as st
+
+try:
+    import folium
+    from streamlit_folium import st_folium
+except ModuleNotFoundError:
+    folium = None
+    st_folium = None
 
 try:
     from streamlit_searchbox import st_searchbox
@@ -20,6 +28,13 @@ except ModuleNotFoundError as error:
     if error.name != "streamlit_searchbox":
         raise
     st_searchbox = None
+
+try:
+    from streamlit_geolocation import streamlit_geolocation
+except ModuleNotFoundError as error:
+    if error.name != "streamlit_geolocation":
+        raise
+    streamlit_geolocation = None
 
 if tuple(map(int, st.__version__.split(".")[:2])) >= (1, 60):
     try:
@@ -38,6 +53,19 @@ LOGO_DATA_URI = "data:image/svg+xml;base64," + base64.b64encode(LOGO_PATH.read_b
 POUNDS_PER_PORTION = 0.75  # A transparent planning estimate, not a measured weight.
 KG_CO2E_PER_POUND = 0.25  # EPA WARM v16: 0.50 metric tons / short ton landfilled.
 PHOTON_API = "https://photon.komoot.io/api/"
+WALKING_ROUTE_API = "https://routing.openstreetmap.de/routed-foot/route/v1/driving/"
+HTTP_HEADERS = {"User-Agent": "CycleBites/1.0 (https://github.com/shaypat112/cyclebites-campus)"}
+_route_lock = threading.Lock()
+_last_route_request = 0.0
+
+
+def fetch_json(url: str, params: dict, timeout: int) -> dict | None:
+    try:
+        response = requests.get(url, params=params, headers=HTTP_HEADERS, timeout=timeout)
+        response.raise_for_status()
+        return response.json()
+    except (requests.RequestException, ValueError):
+        return None
 
 
 def format_place(properties: dict) -> str:
@@ -48,24 +76,79 @@ def format_place(properties: dict) -> str:
 
 
 @st.cache_data(ttl=300, show_spinner=False)
-def search_places(searchterm: str) -> list[str]:
+def search_places(searchterm: str) -> list[tuple[str, dict]]:
     """Query Photon's public search-as-you-type demo conservatively."""
     query = searchterm.strip()
     if len(query) < 3:
         return []
-    request = Request(
-        PHOTON_API + "?" + urlencode({"q": query, "limit": 5, "lang": "en"}),
-        headers={"User-Agent": "CycleBites/1.0 (https://github.com/shaypat112/cyclebites-campus)"},
-    )
-    try:
-        with urlopen(request, timeout=4) as response:
-            features = json.load(response).get("features", [])
-    except (HTTPError, URLError, TimeoutError, ValueError, OSError):
-        return []
-    return list(dict.fromkeys(
-        label for feature in features
-        if (label := format_place(feature.get("properties", {})))
+    response = fetch_json(PHOTON_API, {"q": query, "limit": 5, "lang": "en"}, timeout=4)
+    features = response.get("features", []) if response else []
+    places = {}
+    for feature in features:
+        label = format_place(feature.get("properties", {}))
+        coordinates = feature.get("geometry", {}).get("coordinates", [])
+        if label and len(coordinates) >= 2 and label not in places:
+            places[label] = {"label": label, "lat": coordinates[1], "lon": coordinates[0]}
+    return list(places.items())
+
+
+def miles_between(start: tuple[float, float], end: tuple[float, float]) -> float:
+    """Straight-line distance for ranking, not a travel-distance estimate."""
+    lat1, lon1, lat2, lon2 = map(math.radians, (*start, *end))
+    arc = 2 * math.asin(math.sqrt(
+        math.sin((lat2 - lat1) / 2) ** 2
+        + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2
     ))
+    return 3958.8 * arc
+
+
+def directions_url(destination: tuple[float, float] | str, origin: tuple[float, float] | None = None) -> str:
+    target = f"{destination[0]},{destination[1]}" if isinstance(destination, tuple) else destination
+    parameters = {"api": 1, "destination": target, "travelmode": "walking"}
+    if origin:
+        parameters["origin"] = f"{origin[0]},{origin[1]}"
+    return "https://www.google.com/maps/dir/?" + urlencode(parameters)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def nearby_food_banks(lat: float, lon: float) -> list[dict]:
+    """Search a bounded local area for mapped food banks and pantries."""
+    lat_delta = 15 / 111.0
+    lon_delta = lat_delta / max(math.cos(math.radians(lat)), 0.1)
+    bbox = f"{lon - lon_delta},{lat - lat_delta},{lon + lon_delta},{lat + lat_delta}"
+    found = {}
+    for term in ("food pantry", "food bank"):
+        response = fetch_json(PHOTON_API, {"q": term, "bbox": bbox, "limit": 30, "lang": "en"}, timeout=6)
+        features = response.get("features", []) if response else []
+        for feature in features:
+            tags = feature.get("properties", {})
+            coordinates = feature.get("geometry", {}).get("coordinates", [])
+            name = tags.get("name", "")
+            if len(coordinates) < 2 or not any(word in name.lower() for word in ("food bank", "food pantry", "food shelf")):
+                continue
+            if any(word in name.lower() for word in ("animal", "pet food")):
+                continue
+            point = (coordinates[1], coordinates[0])
+            if miles_between((lat, lon), point) > 10:
+                continue
+            key = (tags.get("osm_type"), tags.get("osm_id"))
+            found[key] = {"name": name, "lat": point[0], "lon": point[1]}
+    return sorted(found.values(), key=lambda bank: miles_between((lat, lon), (bank["lat"], bank["lon"])))[:12]
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def walking_route(start: tuple[float, float], end: tuple[float, float]) -> dict | None:
+    """Return a road-network route; limit requests to the public demo server."""
+    global _last_route_request
+    url = WALKING_ROUTE_API + f"{start[1]},{start[0]};{end[1]},{end[0]}"
+    with _route_lock:
+        delay = 1.0 - (time.monotonic() - _last_route_request)
+        if delay > 0:
+            time.sleep(delay)
+        _last_route_request = time.monotonic()
+        response = fetch_json(url, {"overview": "full", "geometries": "geojson", "steps": "false"}, timeout=8)
+        routes = response.get("routes", []) if response else []
+    return routes[0] if routes else None
 
 
 def utc_now() -> datetime:
@@ -88,6 +171,8 @@ def init_db() -> None:
                 food_name TEXT NOT NULL,
                 portions INTEGER NOT NULL CHECK (portions > 0),
                 pickup_location TEXT NOT NULL,
+                latitude REAL,
+                longitude REAL,
                 expires_at TEXT NOT NULL,
                 notes TEXT NOT NULL DEFAULT '',
                 status TEXT NOT NULL DEFAULT 'available'
@@ -97,6 +182,10 @@ def init_db() -> None:
             )
             """
         )
+        columns = {row["name"] for row in connection.execute("PRAGMA table_info(listings)")}
+        for column in ("latitude", "longitude"):
+            if column not in columns:
+                connection.execute(f"ALTER TABLE listings ADD COLUMN {column} REAL")
 
 
 def add_listing(
@@ -105,6 +194,7 @@ def add_listing(
     pickup_location: str,
     expires_at: datetime,
     notes: str,
+    coordinates: tuple[float, float] | None = None,
 ) -> int:
     if not food_name.strip() or not pickup_location.strip():
         raise ValueError("Food name and pickup location are required.")
@@ -112,18 +202,22 @@ def add_listing(
         raise ValueError("Portions must be greater than zero.")
     if expires_at.tzinfo is None or expires_at.astimezone(timezone.utc) <= utc_now():
         raise ValueError("Pickup deadline must be in the future.")
+    if coordinates and not (-90 <= coordinates[0] <= 90 and -180 <= coordinates[1] <= 180):
+        raise ValueError("Pickup coordinates are outside the map.")
 
     with connect() as connection:
         cursor = connection.execute(
             """
             INSERT INTO listings
-                (food_name, portions, pickup_location, expires_at, notes, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (food_name, portions, pickup_location, latitude, longitude, expires_at, notes, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 food_name.strip(),
                 portions,
                 pickup_location.strip(),
+                coordinates[0] if coordinates else None,
+                coordinates[1] if coordinates else None,
                 expires_at.astimezone(timezone.utc).isoformat(),
                 notes.strip(),
                 utc_now().isoformat(),
@@ -338,7 +432,7 @@ def donor_page() -> None:
                 )
                 st.caption("Place search by Photon · © OpenStreetMap contributors. Type at least 3 characters.")
             if selected_place and selected_place != st.session_state.get("last_selected_place"):
-                st.session_state["pickup_location"] = selected_place
+                st.session_state["pickup_location"] = selected_place["label"]
                 st.session_state["last_selected_place"] = selected_place
             location = st.text_input(
                 "Pickup location *",
@@ -367,11 +461,17 @@ def donor_page() -> None:
             if submitted:
                 try:
                     deadline = datetime.combine(pickup_date, pickup_time).astimezone()
-                    add_listing(food_name, int(portions), location, deadline, notes)
+                    selected = st.session_state.get("last_selected_place")
+                    coordinates = None
+                    if selected and location.startswith(selected["label"]):
+                        coordinates = (selected["lat"], selected["lon"])
+                    add_listing(food_name, int(portions), location, deadline, notes, coordinates)
                 except ValueError as error:
                     st.error(str(error))
                 else:
                     st.success("Pickup published. It is visible on the live board.")
+                    if coordinates is None:
+                        st.caption("This manually entered location has no map pin. Select a place suggestion to add one.")
     with side_area:
         metric_card("Live pickups", len(active_listings()), "Currently available on campus", "donor_live")
         st.write("")
@@ -381,6 +481,156 @@ def donor_page() -> None:
             'and choose a realistic collection deadline.</div>',
             unsafe_allow_html=True,
         )
+
+
+def map_page() -> None:
+    page_header(
+        "Explore / Map & routes",
+        "Food rescue, mapped",
+        "Find the closest available pickup, then plan a walking route to collect or deliver it.",
+    )
+    if notice := st.session_state.pop("claim_notice", None):
+        if notice == "claimed":
+            status_alert("Pickup claimed", "Please collect it before the listed deadline.", "map_claim_success")
+        else:
+            status_alert("Pickup unavailable", "The map has been refreshed. Choose another listing.", "map_claim_unavailable")
+    if folium is None or st_folium is None:
+        st.info("Install the packages in requirements.txt to enable the interactive map.")
+        return
+
+    listings = [row for row in active_listings() if row["latitude"] is not None and row["longitude"] is not None]
+    selected_start = st_searchbox(
+        search_places,
+        key="map_start_search",
+        label="Your starting place",
+        placeholder="Search an address or campus building...",
+        debounce=450,
+        edit_after_submit="option",
+    ) if st_searchbox is not None else None
+    if selected_start and selected_start != st.session_state.get("last_map_start"):
+        st.session_state["map_origin"] = (selected_start["lat"], selected_start["lon"])
+        st.session_state["last_map_start"] = selected_start
+    if streamlit_geolocation is not None:
+        with st.expander("Use my device location"):
+            st.caption("Tap the location icon and allow browser access. Your position is used for this map session.")
+            device_location = streamlit_geolocation()
+        if isinstance(device_location, dict) and device_location.get("latitude") is not None and device_location.get("longitude") is not None:
+            device_point = (device_location["latitude"], device_location["longitude"])
+            if device_point != st.session_state.get("last_device_origin"):
+                st.session_state["map_origin"] = device_point
+                st.session_state["last_device_origin"] = device_point
+    origin = st.session_state.get("map_origin")
+    st.caption("Use your device, select a place, or tap an unmarked point on the map to set your start. Only mapped pickups appear here.")
+
+    pickup_points = {
+        f"Pickup · {row['food_name']} ({row['id']})": (row["latitude"], row["longitude"])
+        for row in listings
+    }
+    anchors = {"Your starting place": origin} if origin else {}
+    anchors.update(pickup_points)
+    pantry_col, route_col = st.columns([1, 1], gap="medium")
+    with pantry_col:
+        if anchors:
+            pantry_anchor_name = st.selectbox("Find food banks near", list(anchors), key="pantry_anchor")
+            if st.button("Find nearby food banks", use_container_width=True):
+                anchor = anchors[pantry_anchor_name]
+                with st.spinner("Searching OpenStreetMap..."):
+                    st.session_state["map_food_banks"] = nearby_food_banks(*anchor)
+                st.session_state["food_banks_anchor"] = anchor
+        else:
+            st.caption("Set a starting place to search for nearby food banks.")
+    food_banks = st.session_state.get("map_food_banks", [])
+    destinations = dict(pickup_points)
+    destinations.update({f"Food bank · {bank['name']} ({i + 1})": (bank["lat"], bank["lon"])
+                         for i, bank in enumerate(food_banks)})
+    route_key = None
+    with route_col:
+        if anchors and destinations:
+            route_start = st.selectbox("Route from", list(anchors), key="route_start")
+            route_destination = st.selectbox("Route to", list(destinations), key="route_destination")
+            start_point, end_point = anchors[route_start], destinations[route_destination]
+            route_key = (start_point, end_point)
+            if st.button("Show walking route", type="primary", use_container_width=True):
+                with st.spinner("Planning route..."):
+                    st.session_state["map_route"] = walking_route(start_point, end_point)
+                st.session_state["map_route_points"] = route_key
+        else:
+            st.caption("Add a starting place and a mapped pickup to plan a route.")
+
+    center = origin or (next(iter(pickup_points.values())) if pickup_points else (39.5, -98.35))
+    map_view = folium.Map(location=center, zoom_start=14 if origin or pickup_points else 4, tiles="OpenStreetMap", control_scale=True)
+    for row in listings:
+        folium.Marker(
+            [row["latitude"], row["longitude"]],
+            tooltip=f"{escape(row['food_name'])} · {row['portions']} portions",
+            popup=folium.Popup(escape(row["pickup_location"]), max_width=240),
+            icon=folium.Icon(color="black", icon="cutlery", prefix="fa"),
+        ).add_to(map_view)
+    for bank in food_banks:
+        folium.Marker(
+            [bank["lat"], bank["lon"]],
+            tooltip=f"Food bank · {escape(bank['name'])}",
+            icon=folium.Icon(color="blue", icon="home", prefix="fa"),
+        ).add_to(map_view)
+    if origin:
+        folium.CircleMarker(origin, radius=8, color="#171717", fill=True, fill_color="#ffffff",
+                            fill_opacity=1, weight=3, tooltip="Your starting place").add_to(map_view)
+    route = st.session_state.get("map_route")
+    if route and st.session_state.get("map_route_points") == route_key:
+        coordinates = route.get("geometry", {}).get("coordinates", [])
+        if coordinates:
+            folium.PolyLine([(lat, lon) for lon, lat in coordinates], color="#171717", weight=5,
+                            opacity=.8, tooltip="Walking route").add_to(map_view)
+            map_view.fit_bounds([list(route_key[0]), list(route_key[1])], padding=(32, 32))
+    map_result = st_folium(map_view, height=430, use_container_width=True, returned_objects=["last_clicked"], key="rescue_map")
+    if map_result and (clicked := map_result.get("last_clicked")):
+        clicked_point = (clicked["lat"], clicked["lng"])
+        if clicked_point != st.session_state.get("last_map_click"):
+            st.session_state["last_map_click"] = clicked_point
+            st.session_state["map_origin"] = clicked_point
+            st.rerun()
+
+    if route and st.session_state.get("map_route_points") == route_key:
+        st.caption(f"Walking route · {route['distance'] / 1609.344:.1f} mi · about {round(route['duration'] / 60)} min. Open directions for turn-by-turn guidance.")
+    elif route_key is not None and st.session_state.get("map_route_points") == route_key and route is None:
+        st.caption("A mapped walking route is unavailable right now. You can still open directions below.")
+    if anchors and destinations:
+        st.link_button("Open turn-by-turn directions ↗", directions_url(end_point, start_point))
+    st.caption("Map data © OpenStreetMap contributors · Walking routes: FOSSGIS OSRM · Tap an empty map area to change your start.")
+
+    st.markdown('<div class="section-heading">Closest available pickups</div>', unsafe_allow_html=True)
+    if not listings:
+        st.info("No mapped pickups are available. New posts appear here when a donor selects a place suggestion.")
+    else:
+        ranked = sorted(listings, key=lambda row: miles_between(origin, (row["latitude"], row["longitude"])) if origin else 0)
+        for row in ranked[:6]:
+            point = (row["latitude"], row["longitude"])
+            distance = f" · {miles_between(origin, point):.1f} mi away (straight line)" if origin else ""
+            with st.container(border=True):
+                details, action = st.columns([3, 1], vertical_alignment="center")
+                with details:
+                    st.markdown(f"**{escape(row['food_name'])}** · {row['portions']} portions{distance}")
+                    st.caption(row["pickup_location"])
+                with action:
+                    st.link_button("Directions ↗", directions_url(point, origin), use_container_width=True)
+                    if st.button("Claim pickup", key=f"map_claim_{row['id']}", use_container_width=True):
+                        st.session_state["claim_notice"] = "claimed" if claim_listing(row["id"]) else "unavailable"
+                        st.rerun()
+
+    st.markdown('<div class="section-heading">Nearby food banks</div>', unsafe_allow_html=True)
+    st.caption("These are possible donation partners from OpenStreetMap. Contact them first to confirm hours, food safety rules, and current needs.")
+    if food_banks:
+        bank_origin = st.session_state.get("food_banks_anchor")
+        for bank in food_banks[:6]:
+            point = (bank["lat"], bank["lon"])
+            distance = f" · {miles_between(bank_origin, point):.1f} mi away" if bank_origin else ""
+            col_name, col_link = st.columns([3, 1], vertical_alignment="center")
+            with col_name:
+                st.markdown(f"**{escape(bank['name'])}**{distance}")
+            with col_link:
+                st.link_button("Directions ↗", directions_url(point, bank_origin), use_container_width=True)
+    elif st.session_state.get("food_banks_anchor"):
+        st.caption("No mapped food banks were found nearby, or the directory is temporarily unavailable.")
 
 
 def board_page() -> None:
@@ -436,6 +686,11 @@ def live_board() -> None:
                     claimed = claim_listing(listing["id"])
                     st.session_state["claim_notice"] = "claimed" if claimed else "unavailable"
                     st.rerun()
+                destination = (
+                    (listing["latitude"], listing["longitude"])
+                    if listing["latitude"] is not None else listing["pickup_location"]
+                )
+                st.link_button("Directions ↗", directions_url(destination), use_container_width=True)
 
 
 def dashboard_page() -> None:
@@ -515,6 +770,7 @@ def main() -> None:
         for label, button_text in (
             ("Cafeteria staff / Donor", "Share food"),
             ("Volunteer / Pantry", "Available pickups"),
+            ("Map & routes", "Map & routes"),
             ("Admin / Teacher", "Impact dashboard"),
         ):
             if st.button(
@@ -537,6 +793,8 @@ def main() -> None:
         donor_page()
     elif role == "Volunteer / Pantry":
         board_page()
+    elif role == "Map & routes":
+        map_page()
     else:
         dashboard_page()
 
