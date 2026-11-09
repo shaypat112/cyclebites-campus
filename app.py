@@ -114,6 +114,17 @@ def impact_totals() -> sqlite3.Row:
         ).fetchone()
 
 
+def recent_claims() -> list[sqlite3.Row]:
+    with connect() as connection:
+        return connection.execute(
+            """
+            SELECT food_name, portions, pickup_location, claimed_at
+            FROM listings WHERE status = 'claimed'
+            ORDER BY claimed_at DESC LIMIT 5
+            """
+        ).fetchall()
+
+
 def apply_theme() -> None:
     st.markdown(
         """
@@ -259,6 +270,69 @@ def live_board() -> None:
                     st.rerun()
 
 
+def dashboard_page() -> None:
+    page_header(
+        "03 / Community impact",
+        "A lighter footprint, together.",
+        "A simple view of the food claimed through CycleBites and its estimated impact.",
+    )
+    totals = impact_totals()
+    meals = int(totals["meals_shared"])
+    pounds = meals * POUNDS_PER_PORTION
+    emissions = pounds * KG_CO2E_PER_POUND
+
+    first, second, third = st.columns(3)
+    with first:
+        with st.container(border=True):
+            st.metric("Food diverted", f"{pounds:,.1f} lb")
+            st.caption("Estimated from claimed portions")
+    with second:
+        with st.container(border=True):
+            st.metric("Meals shared", f"{meals:,}")
+            st.caption("One claimed portion = one meal")
+    with third:
+        with st.container(border=True):
+            st.metric("Landfill emissions avoided", f"{emissions:,.1f} kg CO₂e")
+            st.caption("Illustrative greenhouse gas estimate")
+
+    st.write("")
+    with st.container(border=True):
+        st.subheader("Why this matters")
+        st.write(
+            "When edible food reaches people instead of a landfill, the campus reduces "
+            "potential methane emissions and makes better use of the resources behind each meal."
+        )
+        st.caption(f"{totals['claimed_listings']:,} successful claims recorded so far.")
+
+    st.write("")
+    st.subheader("Recent pickups")
+    claims = recent_claims()
+    if not claims:
+        st.caption("Claims will appear here as soon as the first pickup is reserved.")
+    else:
+        for claim in claims:
+            claimed_at = datetime.fromisoformat(claim["claimed_at"]).astimezone()
+            with st.container(border=True):
+                label, when = st.columns([3, 1], vertical_alignment="center")
+                with label:
+                    st.write(f"**{claim['food_name']}** · {claim['portions']} portions")
+                    st.caption(claim["pickup_location"])
+                with when:
+                    st.caption(claimed_at.strftime("%b %d · %I:%M %p"))
+
+    st.write("")
+    st.caption(
+        "Method: 0.75 lb per portion is an app planning assumption. The emissions estimate "
+        "uses 0.25 kg CO₂e per pound, derived from the U.S. EPA WARM v16 national-average "
+        "food-waste landfilling factor (0.50 metric tons CO₂e per short ton). "
+        "Claims are used as a proxy for completed pickups; actual outcomes may differ."
+    )
+    st.markdown(
+        "[Read the EPA WARM food waste methodology]"
+        "(https://www.epa.gov/system/files/documents/2023-12/warm_organic_materials_v16_dec.pdf)"
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title="CycleBites · Campus food rescue", page_icon="🌿", layout="wide")
     init_db()
@@ -285,7 +359,7 @@ def main() -> None:
     elif role == "Volunteer / Pantry":
         board_page()
     else:
-        st.info("The impact dashboard is coming next.")
+        dashboard_page()
 
 
 if __name__ == "__main__":
